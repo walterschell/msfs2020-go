@@ -63,6 +63,8 @@ func GenerateDefinitionFor(definitionID uint32, t interface{}) ([]AddToDataDefin
 			datumType = SimConnectDataTypeInt32
 		} else if field.Type == reflect.TypeOf(SimConnectInitPosition{}) {
 			datumType = SimConnectDataTypeInitPosition
+		} else if field.Type.Kind() == reflect.Int32 {
+			datumType = SimConnectDataTypeInt32
 		} else {
 			return nil, fmt.Errorf("unsupported field type %s for field %s", field.Type.Kind(), field.Name)
 		}
@@ -125,7 +127,8 @@ func UnmarshalFromSimObjectData(v interface{}, d *RecveSimObjectDataMessage) err
 				return fmt.Errorf("not enough data to fill field %s", field.Name)
 			}
 			u32 := binary.LittleEndian.Uint32(d.Data[index:])
-			val.Field(i).SetInt(int64(u32))
+			i32 := int32(u32)
+			val.Field(i).SetInt(int64(i32))
 			index += 4 // Int32 is 4 bytes
 
 		case reflect.Uint32:

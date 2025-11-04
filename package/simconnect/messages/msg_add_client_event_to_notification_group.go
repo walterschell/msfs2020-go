@@ -17,7 +17,6 @@ func (m *AddClientEventToNotificationGroupMessage) Marshal() (uint32, []byte, er
 		maskable = 1
 	}
 	result = binary.LittleEndian.AppendUint32(result, maskable)
-	result = binary.LittleEndian.AppendUint32(result, PacketTypeAddClientEventToNotificationGroup)
 
 	return PacketTypeAddClientEventToNotificationGroup, result, nil
 }

@@ -311,7 +311,42 @@ func (conn *Connection) Foo() {
 	slog.Debug("Sent RequestDataOnSimObjectMessage to SimConnect server")
 }
 
-func (conn *Connection) StreamDataOnSimObject(t interface{}, objectID uint32, periodSecs uint32, ctx context.Context) (<-chan interface{}, error) {
+type streamDataOnSimObjectConfig struct {
+	periodSecs  uint32
+	whenChanged bool
+}
+
+type StreamDataOnSimObjectOption func(*streamDataOnSimObjectConfig)
+
+func WithPeriodSecs(periodSecs uint32) StreamDataOnSimObjectOption {
+	return func(cfg *streamDataOnSimObjectConfig) {
+		cfg.periodSecs = periodSecs
+	}
+}
+
+func WhenChanged() StreamDataOnSimObjectOption {
+	return func(cfg *streamDataOnSimObjectConfig) {
+		cfg.whenChanged = true
+	}
+}
+
+func (conn *Connection) StreamDataOnSimObjectEx(t interface{}, objectID uint32, ctx context.Context, opts ...StreamDataOnSimObjectOption) (<-chan interface{}, error) {
+	config := &streamDataOnSimObjectConfig{
+		periodSecs:  0,
+		whenChanged: false,
+	}
+
+	for _, opt := range opts {
+		opt(config)
+	}
+	periodSecs := config.periodSecs
+	if config.whenChanged {
+		periodSecs = 0
+	}
+	whenChanged := config.whenChanged
+	if periodSecs == 0 && !whenChanged {
+		return nil, fmt.Errorf("either periodSecs must be > 0 or WhenChanged must be set")
+	}
 	definitionID := conn.getNextPacketId()
 	clearMsg := &ClearDataDefinitionMessage{
 		DefinitionID: definitionID,
@@ -380,12 +415,17 @@ func (conn *Connection) StreamDataOnSimObject(t interface{}, objectID uint32, pe
 	conn.endpoints[requestID] = lnp
 	conn.endpointsLock.Unlock()
 
+	flags := SIMCONNECT_DATA_REQUEST_FLAG_DEFAULT
+	if whenChanged {
+		flags |= SIMCONNECT_DATA_REQUEST_FLAG_CHANGED
+	}
+
 	subMsg := &RequestDataOnSimObjectMessage{
 		RequestID:    requestID,
 		DefinitionID: definitionID,
 		ObjectID:     objectID,
 		Period:       SimConnectPeriodSecond,
-		Flags:        0,
+		Flags:        uint32(flags),
 		Origin:       0,
 		Interval:     periodSecs,
 		Limit:        0,
@@ -401,6 +441,16 @@ func (conn *Connection) StreamDataOnSimObject(t interface{}, objectID uint32, pe
 	}
 	slog.Info("Sent RequestDataOnSimObjectMessage to SimConnect server", "requestID", requestID, "definitionID", definitionID, "objectID", objectID, "periodSecs", periodSecs)
 	return result, nil
+}
+
+func (conn *Connection) StreamDataOnSimObject(t interface{}, objectID uint32, periodSecs uint32, ctx context.Context) (<-chan interface{}, error) {
+	return conn.StreamDataOnSimObjectEx(t, objectID, ctx, WithPeriodSecs(periodSecs))
+}
+
+// StreamDataOnSimObjectWhenChanged starts streaming data for a specific SimObject and will
+// notify immeadiately when data changes. The returned channel will be closed when the context is done.
+func (conn *Connection) StreamDataOnSimObjectWhenChanged(t interface{}, objectID uint32, ctx context.Context) (<-chan interface{}, error) {
+	return conn.StreamDataOnSimObjectEx(t, objectID, ctx, WhenChanged())
 }
 
 func (conn *Connection) CancelStream(requestID uint32) error {
@@ -518,6 +568,7 @@ func (conn *Connection) TeleportColdStart(lat, lon float64) error {
 }
 
 func (conn *Connection) EnsureClientIDForSimEvent(eventName string) (uint32, error) {
+	slog.Info("Ensuring client event ID for sim event", "eventName", eventName)
 	conn.defaultClientEventMappingLock.RLock()
 	if id, ok := conn.defaultClentEventMapping[eventName]; ok {
 		conn.defaultClientEventMappingLock.RUnlock()
@@ -567,7 +618,7 @@ func (conn *Connection) SetPauseSimulation(pause bool) error {
 	msg := &TransmitClientEventMessage{
 		ObjectID: 0,
 		EventID:  id,
-		Data:     uint32(pauseInt),
+		Data:     int32(pauseInt),
 		GroupID:  conn.defaultPriorityGroup,
 		Flags:    0,
 	}
@@ -658,4 +709,37 @@ func (conn *Connection) sendPacket(PacketId uint32, msg SimConnectMessage) (uint
 	slog.Debug("Packet sent to SimConnect server successfully", "packetID", PacketId, "messageType", fmt.Sprintf("0x%X", msgType), "totalSize", totalSize)
 
 	return totalSize, nil
+}
+
+type SimEventSource struct {
+	conn    *Connection
+	eventID uint32
+}
+
+func (src *SimEventSource) Trigger(v1 int32) error {
+	msg := &TransmitClientEventMessage{
+		ObjectID: 0,
+		EventID:  src.eventID,
+		Data:     v1,
+		GroupID:  src.conn.defaultPriorityGroup,
+		Flags:    0,
+	}
+	if _, err := src.conn.sendPacket(src.conn.getNextPacketId(), msg); err != nil {
+		return fmt.Errorf("failed to send TransmitClientEventMessage: %w", err)
+	}
+	slog.Info("Sent event trigger to SimConnect server", "eventID", src.eventID, "v1", v1)
+	return nil
+}
+
+func (conn *Connection) RegisterEventSource(eventName string) (*SimEventSource, error) {
+	slog.Info("Registering event source", "eventName", eventName)
+	id, err := conn.EnsureClientIDForSimEvent(eventName)
+	if err != nil {
+		return nil, fmt.Errorf("failed to ensure client ID for event %s: %w", eventName, err)
+	}
+	slog.Info("Registered event source", "eventName", eventName, "eventID", id)
+	return &SimEventSource{
+		conn:    conn,
+		eventID: id,
+	}, nil
 }

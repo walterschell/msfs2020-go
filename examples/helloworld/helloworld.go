@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"log/slog"
@@ -49,7 +50,7 @@ func main() {
 	fmt.Printf("Connected to SimConnect server at %s\n", endpoint)
 
 	var i = PositionReport{}
-	if err := conn.StreamDataOnSimObject(i, 0, 5); err != nil {
+	if _, err := conn.StreamDataOnSimObject(i, 0, 5, context.Background()); err != nil {
 		fmt.Fprintf(os.Stderr, "Error streaming data on SimObject: %v\n", err)
 		os.Exit(1)
 	}
