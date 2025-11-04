@@ -38,12 +38,11 @@ All received packets are sent to the DispatchProc. The header is 12 bytes:
 #### Received Packet Format (Mermaid Diagram)
 ```mermaid
 packet
-    header: "SimConnect Received Packet Header (12 bytes)" {
-        int32 size           : "Total size in bytes"
-        int32 version        : "Protocol version (0x2 or 0x3)"
-        int32 type           : "Packet type ID (see RECV_ID)"
-    }
-    payload: "Packet Data (variable)"
+title SimConnect Received Packet Header (12 bytes)
++32: "size: Total size in bytes"
++32: "version: Protocol version (0x2 or 0x3)"
++32: "type: Packet type ID (see RECV_ID)"
++128: "payload: Packet Data (variable)"
 ```
 
 ### Example Packet Type IDs
