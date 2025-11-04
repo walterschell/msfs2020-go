@@ -17,13 +17,12 @@ All integers sent, including headers, are in little-endian Intel format. The 16-
 #### Sent Packet Format (Mermaid Diagram)
 ```mermaid
 packet
-    header: "SimConnect Packet Header (16 bytes)" {
-        int32 size           : "Total size in bytes (including header)"
-        int32 version        : "Protocol version (0x2, 0x3, 0x4)"
-        int32 type           : "Packet type ID (OR'ed with 0xF0000000)"
-        int32 identifier     : "Packet identifier (sequence number)"
-    }
-    payload: "Packet Data (variable)"
+title SimConnect Packet Header (16 bytes)
++32: "size: Total size in bytes (including header)"
++32: "version: Protocol version (0x2, 0x3, 0x4)"
++32: "type: Packet type ID (OR'ed with 0xF0000000)"
++32: "identifier: Packet identifier (sequence number)"
++128: "payload: Packet Data (variable)"
 ```
 
 ### Received Packet Format
